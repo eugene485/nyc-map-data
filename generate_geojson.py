@@ -33,12 +33,13 @@ def main():
     query = '''
     SELECT
         aded,
-        ad,
-        sd,
-        cd,
-        council,
-        countycode,
-        CASE countycode
+        -- Use MODE() to get most common district assignment (handles redistricting inconsistencies)
+        MODE(ad) as ad,
+        MODE(sd) as sd,
+        MODE(cd) as cd,
+        MODE(council) as council,
+        MODE(countycode) as countycode,
+        CASE MODE(countycode)
             WHEN 2 THEN 'Bronx'
             WHEN 24 THEN 'Brooklyn'
             WHEN 31 THEN 'Manhattan'
@@ -146,7 +147,7 @@ def main():
 
     FROM "NYC Voter File"
     WHERE aded IS NOT NULL AND aded != ''
-    GROUP BY aded, ad, sd, cd, council, countycode
+    GROUP BY aded
     ORDER BY aded
     '''
 
