@@ -4,9 +4,16 @@ Generate NYC ED GeoJSON from MotherDuck voter file.
 
 This script:
 1. Loads ED boundary geometries from the base GeoJSON (NYC GIS source)
-2. Aggregates fresh voter data from MotherDuck
+2. Aggregates fresh voter data from MotherDuck (ACTIVE VOTERS ONLY - status='A')
 3. Merges them into a complete GeoJSON with all properties
 4. Outputs to nyc-eds.geojson for deployment
+
+CRITICAL: Only active voters (status='A') are included.
+- 57% of voter file is Active
+- 38% is Purged (P) - old addresses, may no longer live there
+- 5% is Inactive (I) - haven't voted recently, addresses may be stale
+
+Using all voters corrupts boundary accuracy tests and inflates missing ED counts.
 
 Run: python3 generate_geojson.py
 Output: nyc-eds.geojson
@@ -149,6 +156,7 @@ def main():
 
     FROM NYS_Voters_2026
     WHERE countycode IN (3, 24, 31, 41, 43)  -- NYC counties only
+    AND status = 'A'  -- ACTIVE VOTERS ONLY (exclude Purged/Inactive with stale addresses)
     AND aded IS NOT NULL AND aded != ''
     GROUP BY aded
     ORDER BY aded
@@ -249,10 +257,11 @@ def main():
     # Add metadata
     geojson['metadata'] = {
         'generated': datetime.now().isoformat(),
-        'source': 'MotherDuck NYC Voter File',
+        'source': 'MotherDuck NYC Voter File (ACTIVE VOTERS ONLY, status=A)',
         'total_voters': int(df['total'].sum()),
         'total_eds': updated,
-        'uninhabited_eds': no_data
+        'uninhabited_eds': no_data,
+        'note': 'Excludes Purged (P) and Inactive (I) voters who have stale addresses'
     }
 
     # Write output
