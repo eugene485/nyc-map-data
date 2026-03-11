@@ -222,10 +222,20 @@ def main():
             props['name'] = f"ED {aded}"
             updated += 1
         else:
-            # Mark as uninhabited
-            props['total'] = 0
+            # IMPORTANT: Clear ALL stale voter data from base GeoJSON
+            # The base file may have old voter data baked in that no longer matches
+            # Only keep geometry-related properties
+            geometry_props = {'OBJECTID', 'ElectDist', 'Shape__Area', 'Shape__Length', 'ed', 'ad', 'ADED'}
+            keys_to_remove = [k for k in props.keys() if k not in geometry_props]
+            for k in keys_to_remove:
+                del props[k]
+
+            # Set clean uninhabited state
+            props['ADED'] = aded if aded else None
             props['name'] = f"ED {aded}" if aded else "Unknown"
-            props['total'] = props.get('total', 0)  # Ensure total exists
+            props['total'] = 0
+            props['single_prime'] = 0
+            props['double_prime'] = 0
             no_data += 1
 
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Updated {updated} features, {no_data} uninhabited/no-match")
