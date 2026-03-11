@@ -175,6 +175,25 @@ def main():
 
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(geojson['features'])} features")
 
+    # VALIDATION: Ensure all features have ADED property
+    missing_aded = 0
+    for feature in geojson['features']:
+        props = feature['properties']
+        if not props.get('ADED'):
+            # Compute from ad+ed or ElectDist
+            ad = props.get('ad')
+            ed = props.get('ed')
+            if ad is not None and ed is not None:
+                props['ADED'] = f"{int(ad)}-{int(ed):03d}"
+            elif props.get('ElectDist'):
+                s = str(int(props['ElectDist']))
+                props['ADED'] = f"{int(s[:2])}-{int(s[2:]):03d}"
+            else:
+                missing_aded += 1
+
+    if missing_aded > 0:
+        print(f"WARNING: {missing_aded} features have no ADED and cannot be matched!")
+
     # Merge voter data into GeoJSON properties
     updated = 0
     no_data = 0
@@ -235,6 +254,14 @@ def main():
     # Verify
     file_size = os.path.getsize(output_path) / 1024 / 1024
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done! Output: {file_size:.1f} MB")
+
+    # VALIDATION: Check output feature count
+    expected_min = 6000  # Base file should have ~6200+ features
+    if len(geojson['features']) < expected_min:
+        print(f"ERROR: Output has only {len(geojson['features'])} features, expected at least {expected_min}!")
+        print("Check if base GeoJSON was corrupted or ADED matching failed.")
+    else:
+        print(f"VALIDATION PASSED: {len(geojson['features'])} features (>= {expected_min})")
 
     # Sample verification
     sample_aded = "62-007"
