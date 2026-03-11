@@ -40,7 +40,7 @@ def main():
         MODE(council) as council,
         MODE(countycode) as countycode,
         CASE MODE(countycode)
-            WHEN 2 THEN 'Bronx'
+            WHEN 3 THEN 'Bronx'
             WHEN 24 THEN 'Brooklyn'
             WHEN 31 THEN 'Manhattan'
             WHEN 41 THEN 'Queens'
