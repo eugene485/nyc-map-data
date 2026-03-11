@@ -147,8 +147,9 @@ def main():
         SUM(CASE WHEN Likely_Ethnicity = 'Tibetan' THEN 1 ELSE 0 END) as tibetan,
         SUM(CASE WHEN Likely_Ethnicity = 'Sikh' THEN 1 ELSE 0 END) as sikh
 
-    FROM "NYC Voter File"
-    WHERE aded IS NOT NULL AND aded != ''
+    FROM NYS_Voters_2026
+    WHERE countycode IN (3, 24, 31, 41, 43)  -- NYC counties only
+    AND aded IS NOT NULL AND aded != ''
     GROUP BY aded
     ORDER BY aded
     '''
