@@ -21,7 +21,9 @@ from datetime import datetime
 TOKEN = os.environ.get('MOTHERDUCK_TOKEN') or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImV1Z2VuZUBsZWdpb24ubnljIiwibWRSZWdpb24iOiJhd3MtdXMtZWFzdC0xIiwic2Vzc2lvbiI6ImV1Z2VuZS5sZWdpb24ubnljIiwicGF0IjoiZFBHM2pxMGQxbUpRTGd5akxheW9lYmZtZkhsZXhzbS1EdnhHR2N6Ull5RSIsInVzZXJJZCI6ImU1NmIzZWU0LTFmZDUtNGJlNS1hNjkwLWU5NzEwZDA2YjdhYiIsImlzcyI6Im1kX3BhdCIsInJlYWRPbmx5IjpmYWxzZSwidG9rZW5UeXBlIjoicmVhZF93cml0ZSIsImlhdCI6MTc2NTA4MzUzMn0.N6SRMQmdcvFzI3S2mUBuNtq2knCNn2zFTVa_bFPe-9k"
 
 # Base GeoJSON with ED boundaries (geometry only)
-BASE_GEOJSON = os.path.expanduser("~/legion-dashboard/public/nycmap/nyc-all-eds-merged.geojson")
+# IMPORTANT: Use nyc-all-eds-complete.geojson (4,338 official ED boundaries)
+# NEVER use nyc-all-eds-merged.geojson (contains 1,896 bad approximate convex hulls)
+BASE_GEOJSON = os.path.expanduser("~/legion-dashboard/public/nycmap/nyc-all-eds-complete.geojson")
 
 def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Connecting to MotherDuck...")
@@ -256,7 +258,8 @@ def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done! Output: {file_size:.1f} MB")
 
     # VALIDATION: Check output feature count
-    expected_min = 6000  # Base file should have ~6200+ features
+    # Clean file has 4,338 official ED boundaries (no approximate convex hulls)
+    expected_min = 4300
     if len(geojson['features']) < expected_min:
         print(f"ERROR: Output has only {len(geojson['features'])} features, expected at least {expected_min}!")
         print("Check if base GeoJSON was corrupted or ADED matching failed.")
