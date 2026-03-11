@@ -216,18 +216,23 @@ def main():
 
         if aded and aded in voter_data:
             data = voter_data[aded]
-            # Update all properties from voter data
+            # Update voter count properties from voter data
+            # IMPORTANT: Do NOT overwrite geographic district fields from shapefile
+            # The shapefile has the correct geographic assignments
+            # The voter file has registration assignments which may differ
+            geographic_fields = {'ad', 'sd', 'cd', 'council', 'countycode', 'county', 'aded'}
             for key, value in data.items():
-                if key != 'aded':  # Don't duplicate ADED
+                if key not in geographic_fields:
                     props[key] = value
             props['name'] = f"ED {aded}"
             updated += 1
         else:
             # IMPORTANT: Clear ALL stale voter data from base GeoJSON
             # The base file may have old voter data baked in that no longer matches
-            # Only keep geometry-related properties
-            geometry_props = {'OBJECTID', 'ElectDist', 'Shape__Area', 'Shape__Length', 'ed', 'ad', 'ADED'}
-            keys_to_remove = [k for k in props.keys() if k not in geometry_props]
+            # Keep geometry and geographic district properties (these are correct in shapefile)
+            keep_props = {'OBJECTID', 'ElectDist', 'Shape__Area', 'Shape__Length',
+                         'ed', 'ad', 'ADED', 'sd', 'cd', 'council', 'countycode'}
+            keys_to_remove = [k for k in props.keys() if k not in keep_props]
             for k in keys_to_remove:
                 del props[k]
 
