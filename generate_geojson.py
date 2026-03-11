@@ -181,7 +181,16 @@ def main():
 
     for feature in geojson['features']:
         props = feature['properties']
+
+        # Get ADED - compute from ad+ed if not present
         aded = props.get('ADED')
+        if not aded:
+            ad = props.get('ad')
+            ed = props.get('ed')
+            if ad is not None and ed is not None:
+                # Format: "AD-EEE" (e.g., "23-003")
+                aded = f"{int(ad)}-{int(ed):03d}"
+                props['ADED'] = aded  # Add ADED property for consistency
 
         if aded and aded in voter_data:
             data = voter_data[aded]
@@ -195,9 +204,10 @@ def main():
             # Mark as uninhabited
             props['total'] = 0
             props['name'] = f"ED {aded}" if aded else "Unknown"
+            props['total'] = props.get('total', 0)  # Ensure total exists
             no_data += 1
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Updated {updated} features, {no_data} uninhabited")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Updated {updated} features, {no_data} uninhabited/no-match")
 
     # Add metadata
     geojson['metadata'] = {
