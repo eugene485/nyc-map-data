@@ -8,8 +8,8 @@ This is the SINGLE SOURCE OF TRUTH for ED-level aggregations used by:
 - Targeting tools
 - Search
 
-CRITICAL: Only active voters (status='A') are included.
-Dissolved EDs (purged-only) are excluded.
+CRITICAL: Only ACTIVE DEMOCRATS (status='A' AND enrollment='DEM') are included.
+This matches the map and Targeting Sheet (Democrats only for primary targeting).
 
 Run: python3 generate_summary.py
 Output: nyc-ed-summary.json
@@ -235,7 +235,8 @@ def main():
 
     FROM NYS_Voters_2026
     WHERE countycode IN (3, 24, 31, 41, 43)  -- NYC only
-    AND status = 'A'  -- ACTIVE VOTERS ONLY
+    AND status = 'A'           -- Active voters only
+    AND enrollment = 'DEM'     -- Democrats only (matches Targeting Sheet)
     AND aded IS NOT NULL AND aded != ''
     GROUP BY aded
     HAVING COUNT(*) > 0  -- Exclude dissolved EDs (0 active voters)
