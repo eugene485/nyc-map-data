@@ -8,13 +8,10 @@ This script:
 3. Merges them into a complete GeoJSON with all properties
 4. Outputs to nyc-eds.geojson for deployment
 
-CRITICAL: Primary counts use ACTIVE voters only (status='A').
-- 57% of voter file is Active
-- 38% is Purged (P) - old addresses, may no longer live there
-- 5% is Inactive (I) - haven't voted recently, addresses may be stale
-
-SECONDARY counts (total_all, purged_count, inactive_count) include ALL voters
-so that EDs with only purged voters still show SOMETHING on the map.
+CRITICAL: All counts are ACTIVE DEMOCRATS ONLY (status='A' AND enrollment='DEM').
+This matches the Targeting Sheet which shows Democrats only.
+- 3.2M active Democrats in NYC
+- Maps and Targeting Sheet show consistent data
 
 Run: python3 generate_geojson.py
 Output: nyc-eds.geojson
@@ -29,9 +26,8 @@ from datetime import datetime
 TOKEN = os.environ.get('MOTHERDUCK_TOKEN') or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImV1Z2VuZUBsZWdpb24ubnljIiwibWRSZWdpb24iOiJhd3MtdXMtZWFzdC0xIiwic2Vzc2lvbiI6ImV1Z2VuZS5sZWdpb24ubnljIiwicGF0IjoiZFBHM2pxMGQxbUpRTGd5akxheW9lYmZtZkhsZXhzbS1EdnhHR2N6Ull5RSIsInVzZXJJZCI6ImU1NmIzZWU0LTFmZDUtNGJlNS1hNjkwLWU5NzEwZDA2YjdhYiIsImlzcyI6Im1kX3BhdCIsInJlYWRPbmx5IjpmYWxzZSwidG9rZW5UeXBlIjoicmVhZF93cml0ZSIsImlhdCI6MTc2NTA4MzUzMn0.N6SRMQmdcvFzI3S2mUBuNtq2knCNn2zFTVa_bFPe-9k"
 
 # Base GeoJSON with ED boundaries (geometry only)
-# IMPORTANT: Use nyc-all-eds-complete.geojson (4,338 official ED boundaries)
-# NEVER use nyc-all-eds-merged.geojson (contains 1,896 bad approximate convex hulls)
-BASE_GEOJSON = os.path.expanduser("~/legion-dashboard/public/nycmap/nyc-all-eds-complete.geojson")
+# Source: ArcGIS NYC DCP election districts - official boundaries
+BASE_GEOJSON = os.path.expanduser("~/Downloads/ed_shapefile/arcgis_dcp_nyc_eds_complete.geojson")
 
 def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Connecting to MotherDuck...")
@@ -57,125 +53,97 @@ def main():
             WHEN 43 THEN 'Staten Island'
         END as county,
 
-        -- ===== ALL VOTERS (regardless of status) =====
-        -- These show in EDs that have ONLY purged/inactive voters
-        COUNT(*) as total_all,
-        SUM(CASE WHEN status = 'A' THEN 1 ELSE 0 END) as active_count,
-        SUM(CASE WHEN status = 'P' THEN 1 ELSE 0 END) as purged_count,
-        SUM(CASE WHEN status = 'I' THEN 1 ELSE 0 END) as inactive_count,
+        -- ===== ALL COUNTS ARE DEMOCRATS ONLY =====
+        -- (WHERE clause filters to status='A' AND enrollment='DEM')
+        COUNT(*) as total,
 
-        -- ===== ACTIVE VOTERS ONLY (status='A') =====
-        -- Primary counts for map display and analysis
-        SUM(CASE WHEN status = 'A' THEN 1 ELSE 0 END) as total,
+        -- Primary vote universes
+        SUM(CASE WHEN primary_votes >= 1 THEN 1 ELSE 0 END) as single_prime,
+        SUM(CASE WHEN primary_votes >= 2 THEN 1 ELSE 0 END) as double_prime,
+        SUM(CASE WHEN primary_votes >= 3 THEN 1 ELSE 0 END) as triple_prime,
 
-        -- Party counts (ACTIVE voters only)
-        SUM(CASE WHEN status = 'A' AND enrollment = 'DEM' THEN 1 ELSE 0 END) as dem,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'REP' THEN 1 ELSE 0 END) as rep,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'CON' THEN 1 ELSE 0 END) as con,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'WOR' THEN 1 ELSE 0 END) as wor,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'GRE' THEN 1 ELSE 0 END) as gre,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'LBT' THEN 1 ELSE 0 END) as lbt,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'IND' THEN 1 ELSE 0 END) as ind,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'BLK' THEN 1 ELSE 0 END) as blk,
-        SUM(CASE WHEN status = 'A' AND enrollment NOT IN ('DEM','REP','CON','WOR','GRE','LBT','IND','BLK') THEN 1 ELSE 0 END) as oth,
+        -- General vote universes
+        SUM(CASE WHEN general_votes >= 1 THEN 1 ELSE 0 END) as single_gen,
+        SUM(CASE WHEN general_votes >= 2 THEN 1 ELSE 0 END) as double_gen,
+        SUM(CASE WHEN general_votes >= 3 THEN 1 ELSE 0 END) as triple_gen,
 
-        -- Primary vote universes (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND primary_votes >= 1 THEN 1 ELSE 0 END) as single_prime,
-        SUM(CASE WHEN status = 'A' AND primary_votes >= 2 THEN 1 ELSE 0 END) as double_prime,
-        SUM(CASE WHEN status = 'A' AND primary_votes >= 3 THEN 1 ELSE 0 END) as triple_prime,
+        -- Age groups
+        SUM(CASE WHEN age BETWEEN 18 AND 25 THEN 1 ELSE 0 END) as age_18_25,
+        SUM(CASE WHEN age BETWEEN 26 AND 34 THEN 1 ELSE 0 END) as age_26_34,
+        SUM(CASE WHEN age BETWEEN 35 AND 44 THEN 1 ELSE 0 END) as age_35_44,
+        SUM(CASE WHEN age BETWEEN 45 AND 54 THEN 1 ELSE 0 END) as age_45_54,
+        SUM(CASE WHEN age BETWEEN 55 AND 64 THEN 1 ELSE 0 END) as age_55_64,
+        SUM(CASE WHEN age >= 65 THEN 1 ELSE 0 END) as age_65_plus,
 
-        -- General vote universes (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND general_votes >= 1 THEN 1 ELSE 0 END) as single_gen,
-        SUM(CASE WHEN status = 'A' AND general_votes >= 2 THEN 1 ELSE 0 END) as double_gen,
-        SUM(CASE WHEN status = 'A' AND general_votes >= 3 THEN 1 ELSE 0 END) as triple_gen,
+        -- Age groups for single prime
+        SUM(CASE WHEN age BETWEEN 18 AND 25 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_18_25_sp,
+        SUM(CASE WHEN age BETWEEN 26 AND 34 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_26_34_sp,
+        SUM(CASE WHEN age BETWEEN 35 AND 44 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_35_44_sp,
+        SUM(CASE WHEN age BETWEEN 45 AND 54 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_45_54_sp,
+        SUM(CASE WHEN age BETWEEN 55 AND 64 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_55_64_sp,
+        SUM(CASE WHEN age >= 65 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_65_plus_sp,
 
-        -- Party counts for single prime (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND enrollment = 'DEM' AND primary_votes >= 1 THEN 1 ELSE 0 END) as dem_sp,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'REP' AND primary_votes >= 1 THEN 1 ELSE 0 END) as rep_sp,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'BLK' AND primary_votes >= 1 THEN 1 ELSE 0 END) as blk_sp,
+        -- Age groups for double prime
+        SUM(CASE WHEN age BETWEEN 18 AND 25 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_18_25_dp,
+        SUM(CASE WHEN age BETWEEN 26 AND 34 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_26_34_dp,
+        SUM(CASE WHEN age BETWEEN 35 AND 44 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_35_44_dp,
+        SUM(CASE WHEN age BETWEEN 45 AND 54 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_45_54_dp,
+        SUM(CASE WHEN age BETWEEN 55 AND 64 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_55_64_dp,
+        SUM(CASE WHEN age >= 65 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_65_plus_dp,
 
-        -- Party counts for double prime (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND enrollment = 'DEM' AND primary_votes >= 2 THEN 1 ELSE 0 END) as dem_dp,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'REP' AND primary_votes >= 2 THEN 1 ELSE 0 END) as rep_dp,
-        SUM(CASE WHEN status = 'A' AND enrollment = 'BLK' AND primary_votes >= 2 THEN 1 ELSE 0 END) as blk_dp,
+        -- Race
+        SUM(CASE WHEN Likely_Race = 'White' THEN 1 ELSE 0 END) as white,
+        SUM(CASE WHEN Likely_Race = 'Black' THEN 1 ELSE 0 END) as black,
+        SUM(CASE WHEN Likely_Race = 'Hispanic' THEN 1 ELSE 0 END) as hispanic,
+        SUM(CASE WHEN Likely_Race = 'Asian' THEN 1 ELSE 0 END) as asian,
+        SUM(CASE WHEN Likely_Race = 'MENA' THEN 1 ELSE 0 END) as mena,
 
-        -- Age groups (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 18 AND 25 THEN 1 ELSE 0 END) as age_18_25,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 26 AND 34 THEN 1 ELSE 0 END) as age_26_34,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 35 AND 44 THEN 1 ELSE 0 END) as age_35_44,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 45 AND 54 THEN 1 ELSE 0 END) as age_45_54,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 55 AND 64 THEN 1 ELSE 0 END) as age_55_64,
-        SUM(CASE WHEN status = 'A' AND age >= 65 THEN 1 ELSE 0 END) as age_65_plus,
+        -- Race for single prime
+        SUM(CASE WHEN Likely_Race = 'White' AND primary_votes >= 1 THEN 1 ELSE 0 END) as white_sp,
+        SUM(CASE WHEN Likely_Race = 'Black' AND primary_votes >= 1 THEN 1 ELSE 0 END) as black_sp,
+        SUM(CASE WHEN Likely_Race = 'Hispanic' AND primary_votes >= 1 THEN 1 ELSE 0 END) as hispanic_sp,
+        SUM(CASE WHEN Likely_Race = 'Asian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as asian_sp,
+        SUM(CASE WHEN Likely_Race = 'MENA' AND primary_votes >= 1 THEN 1 ELSE 0 END) as mena_sp,
 
-        -- Age groups for single prime (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 18 AND 25 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_18_25_sp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 26 AND 34 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_26_34_sp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 35 AND 44 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_35_44_sp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 45 AND 54 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_45_54_sp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 55 AND 64 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_55_64_sp,
-        SUM(CASE WHEN status = 'A' AND age >= 65 AND primary_votes >= 1 THEN 1 ELSE 0 END) as age_65_plus_sp,
+        -- Race for double prime
+        SUM(CASE WHEN Likely_Race = 'White' AND primary_votes >= 2 THEN 1 ELSE 0 END) as white_dp,
+        SUM(CASE WHEN Likely_Race = 'Black' AND primary_votes >= 2 THEN 1 ELSE 0 END) as black_dp,
+        SUM(CASE WHEN Likely_Race = 'Hispanic' AND primary_votes >= 2 THEN 1 ELSE 0 END) as hispanic_dp,
+        SUM(CASE WHEN Likely_Race = 'Asian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as asian_dp,
+        SUM(CASE WHEN Likely_Race = 'MENA' AND primary_votes >= 2 THEN 1 ELSE 0 END) as mena_dp,
 
-        -- Age groups for double prime (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 18 AND 25 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_18_25_dp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 26 AND 34 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_26_34_dp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 35 AND 44 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_35_44_dp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 45 AND 54 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_45_54_dp,
-        SUM(CASE WHEN status = 'A' AND age BETWEEN 55 AND 64 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_55_64_dp,
-        SUM(CASE WHEN status = 'A' AND age >= 65 AND primary_votes >= 2 THEN 1 ELSE 0 END) as age_65_plus_dp,
-
-        -- Race (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'White' THEN 1 ELSE 0 END) as white,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Black' THEN 1 ELSE 0 END) as black,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Hispanic' THEN 1 ELSE 0 END) as hispanic,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Asian' THEN 1 ELSE 0 END) as asian,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'MENA' THEN 1 ELSE 0 END) as mena,
-
-        -- Race for single prime (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'White' AND primary_votes >= 1 THEN 1 ELSE 0 END) as white_sp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Black' AND primary_votes >= 1 THEN 1 ELSE 0 END) as black_sp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Hispanic' AND primary_votes >= 1 THEN 1 ELSE 0 END) as hispanic_sp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Asian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as asian_sp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'MENA' AND primary_votes >= 1 THEN 1 ELSE 0 END) as mena_sp,
-
-        -- Race for double prime (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'White' AND primary_votes >= 2 THEN 1 ELSE 0 END) as white_dp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Black' AND primary_votes >= 2 THEN 1 ELSE 0 END) as black_dp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Hispanic' AND primary_votes >= 2 THEN 1 ELSE 0 END) as hispanic_dp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'Asian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as asian_dp,
-        SUM(CASE WHEN status = 'A' AND Likely_Race = 'MENA' AND primary_votes >= 2 THEN 1 ELSE 0 END) as mena_dp,
-
-        -- Key ethnicities (ACTIVE only)
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Jewish' THEN 1 ELSE 0 END) as jewish,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Chinese' THEN 1 ELSE 0 END) as chinese,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Korean' THEN 1 ELSE 0 END) as korean,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Indian' THEN 1 ELSE 0 END) as indian,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Pakistani' THEN 1 ELSE 0 END) as pakistani,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Bangladeshi' THEN 1 ELSE 0 END) as bangladeshi,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Filipino' THEN 1 ELSE 0 END) as filipino,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Vietnamese' THEN 1 ELSE 0 END) as vietnamese,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Arab' THEN 1 ELSE 0 END) as arab,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Haitian' THEN 1 ELSE 0 END) as haitian,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Jamaican' THEN 1 ELSE 0 END) as jamaican,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Irish' THEN 1 ELSE 0 END) as irish,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Italian' THEN 1 ELSE 0 END) as italian,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Polish' THEN 1 ELSE 0 END) as polish,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Greek' THEN 1 ELSE 0 END) as greek,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Tibetan' THEN 1 ELSE 0 END) as tibetan,
-        SUM(CASE WHEN status = 'A' AND Likely_Ethnicity = 'Sikh' THEN 1 ELSE 0 END) as sikh
+        -- Key ethnicities
+        SUM(CASE WHEN Likely_Ethnicity = 'Jewish' THEN 1 ELSE 0 END) as jewish,
+        SUM(CASE WHEN Likely_Ethnicity = 'Chinese' THEN 1 ELSE 0 END) as chinese,
+        SUM(CASE WHEN Likely_Ethnicity = 'Korean' THEN 1 ELSE 0 END) as korean,
+        SUM(CASE WHEN Likely_Ethnicity = 'Indian' THEN 1 ELSE 0 END) as indian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Pakistani' THEN 1 ELSE 0 END) as pakistani,
+        SUM(CASE WHEN Likely_Ethnicity = 'Bangladeshi' THEN 1 ELSE 0 END) as bangladeshi,
+        SUM(CASE WHEN Likely_Ethnicity = 'Filipino' THEN 1 ELSE 0 END) as filipino,
+        SUM(CASE WHEN Likely_Ethnicity = 'Vietnamese' THEN 1 ELSE 0 END) as vietnamese,
+        SUM(CASE WHEN Likely_Ethnicity = 'Arab' THEN 1 ELSE 0 END) as arab,
+        SUM(CASE WHEN Likely_Ethnicity = 'Haitian' THEN 1 ELSE 0 END) as haitian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Jamaican' THEN 1 ELSE 0 END) as jamaican,
+        SUM(CASE WHEN Likely_Ethnicity = 'Irish' THEN 1 ELSE 0 END) as irish,
+        SUM(CASE WHEN Likely_Ethnicity = 'Italian' THEN 1 ELSE 0 END) as italian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Polish' THEN 1 ELSE 0 END) as polish,
+        SUM(CASE WHEN Likely_Ethnicity = 'Greek' THEN 1 ELSE 0 END) as greek,
+        SUM(CASE WHEN Likely_Ethnicity = 'Tibetan' THEN 1 ELSE 0 END) as tibetan,
+        SUM(CASE WHEN Likely_Ethnicity = 'Sikh' THEN 1 ELSE 0 END) as sikh
 
     FROM NYS_Voters_2026
     WHERE countycode IN (3, 24, 31, 41, 43)  -- NYC counties only
     AND aded IS NOT NULL AND aded != ''
+    AND status = 'A'           -- Active voters only
+    AND enrollment = 'DEM'     -- Democrats only (matches Targeting Sheet)
     GROUP BY aded
     ORDER BY aded
     '''
 
     df = conn.execute(query).fetchdf()
-    active_total = df['total'].sum()
-    all_total = df['total_all'].sum()
+    dem_total = df['total'].sum()
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Got {len(df)} ED aggregations")
-    print(f"[{datetime.now().strftime('%H:%M:%S')}]   Active voters: {active_total:,}")
-    print(f"[{datetime.now().strftime('%H:%M:%S')}]   All voters: {all_total:,} (includes {df['purged_count'].sum():,} purged, {df['inactive_count'].sum():,} inactive)")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}]   Active Democrats: {dem_total:,}")
 
     # Convert to lookup dict
     def convert_row(row):
@@ -270,10 +238,6 @@ def main():
             props['ADED'] = aded if aded else None
             props['name'] = f"ED {aded}" if aded else "Unknown"
             props['total'] = 0
-            props['total_all'] = 0
-            props['purged_count'] = 0
-            props['inactive_count'] = 0
-            props['active_count'] = 0
             props['single_prime'] = 0
             props['double_prime'] = 0
             props['has_active_voters'] = False
@@ -292,18 +256,18 @@ def main():
     geojson['metadata'] = {
         'generated': datetime.now().isoformat(),
         'source': 'MotherDuck NYC Voter File',
-        'active_voters': int(df['total'].sum()),
-        'all_voters': int(df['total_all'].sum()),
-        'purged_voters': int(df['purged_count'].sum()),
-        'inactive_voters': int(df['inactive_count'].sum()),
-        'eds_with_active': updated_active,
+        'population': 'Active Democrats only (status=A, enrollment=DEM)',
+        'active_democrats': int(df['total'].sum()),
+        'single_prime': int(df['single_prime'].sum()),
+        'double_prime': int(df['double_prime'].sum()),
+        'eds_with_dems': updated_active,
         'eds_dissolved_removed': dissolved_removed,
-        'eds_no_voters': no_data,
+        'eds_no_dems': no_data,
         'total_eds': updated_active + no_data,
-        'note': 'Dissolved EDs (stale pre-2022 redistricting boundaries with only purged voters) have been removed. Primary counts use ACTIVE voters only.',
+        'note': 'This GeoJSON contains DEMOCRATS ONLY to match Targeting Sheet. Non-Dems and inactive voters excluded.',
         'data_quality_values': {
-            'good': 'Has active voters - use for analysis',
-            'no_voters': 'No voters in voter file - uninhabited or new ED'
+            'good': 'Has active Democrats - use for analysis',
+            'no_voters': 'No Democrats in voter file - uninhabited or non-Dem ED'
         }
     }
 
