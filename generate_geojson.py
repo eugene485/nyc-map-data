@@ -26,7 +26,8 @@ from datetime import datetime
 TOKEN = os.environ.get('MOTHERDUCK_TOKEN') or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImV1Z2VuZUBsZWdpb24ubnljIiwibWRSZWdpb24iOiJhd3MtdXMtZWFzdC0xIiwic2Vzc2lvbiI6ImV1Z2VuZS5sZWdpb24ubnljIiwicGF0IjoiZFBHM2pxMGQxbUpRTGd5akxheW9lYmZtZkhsZXhzbS1EdnhHR2N6Ull5RSIsInVzZXJJZCI6ImU1NmIzZWU0LTFmZDUtNGJlNS1hNjkwLWU5NzEwZDA2YjdhYiIsImlzcyI6Im1kX3BhdCIsInJlYWRPbmx5IjpmYWxzZSwidG9rZW5UeXBlIjoicmVhZF93cml0ZSIsImlhdCI6MTc2NTA4MzUzMn0.N6SRMQmdcvFzI3S2mUBuNtq2knCNn2zFTVa_bFPe-9k"
 
 # Base GeoJSON with ED boundaries (geometry only)
-# Source: ArcGIS NYC DCP election districts - official boundaries
+# Source: ArcGIS NYC DCP - has 100% coverage of voter file ADEDs
+# The NYT 2024 shapefile is missing 69 EDs (36,890 voters)
 BASE_GEOJSON = os.path.expanduser("~/Downloads/ed_shapefile/arcgis_dcp_nyc_eds_complete.geojson")
 
 def main():
@@ -201,18 +202,26 @@ def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(geojson['features'])} features")
 
     # VALIDATION: Ensure all features have ADED property
+    # ArcGIS format uses ElectDist (e.g., 23003 = AD 23, ED 003)
+    # NYT format uses ADED (e.g., "23-003")
     missing_aded = 0
     for feature in geojson['features']:
         props = feature['properties']
         if not props.get('ADED'):
-            # Compute from ad+ed or ElectDist
-            ad = props.get('ad')
-            ed = props.get('ed')
-            if ad is not None and ed is not None:
-                props['ADED'] = f"{int(ad)}-{int(ed):03d}"
-            elif props.get('ElectDist'):
-                s = str(int(props['ElectDist']))
-                props['ADED'] = f"{int(s[:2])}-{int(s[2:]):03d}"
+            # Try ElectDist first (ArcGIS format)
+            if props.get('ElectDist'):
+                electdist = int(props['ElectDist'])
+                s = str(electdist)
+                if len(s) >= 4:
+                    # Format: AAEEE (e.g., 23003 = AD 23, ED 003)
+                    ad = int(s[:-3]) if len(s) > 3 else int(s[0])
+                    ed = int(s[-3:])
+                    props['ADED'] = f"{ad}-{ed:03d}"
+                else:
+                    missing_aded += 1
+            # Try ad+ed (some formats)
+            elif props.get('ad') is not None and props.get('ed') is not None:
+                props['ADED'] = f"{int(props['ad'])}-{int(props['ed']):03d}"
             else:
                 missing_aded += 1
 
@@ -242,17 +251,8 @@ def main():
 
         if aded and aded in voter_data:
             data = voter_data[aded]
-            has_active = data.get('total', 0) > 0
-
-            if not has_active:
-                # DISSOLVED ED: Has voters but ALL are purged/inactive
-                # These are stale pre-2022 redistricting boundaries - REMOVE from output
-                dissolved_removed += 1
-                continue  # Skip this feature entirely
-
             # Update properties from voter data
             # Write ALL fields from MotherDuck including districts (ad, sd, cd, council)
-            # The shapefile doesn't have these district fields - they come from voter data
             for key, value in data.items():
                 if key != 'aded':  # Keep ADED from shapefile (already computed)
                     props[key] = value
@@ -262,11 +262,28 @@ def main():
             updated_active += 1
             filtered_features.append(feature)
         else:
-            # No voter data = STALE ED from pre-redistricting shapefile
-            # These EDs no longer exist - voters were reassigned to new EDs
-            # REMOVE them from output (don't append to filtered_features)
+            # ED exists in shapefile but no active Democrats in voter file
+            # This could be:
+            # 1. Non-residential ED (parks, water, cemeteries)
+            # 2. ED with only Republicans/independents
+            # 3. Stale ED where voters were reassigned (redistricting)
+            # INCLUDE these EDs with 0 values so boundaries show on map
+            props['name'] = f"ED {aded}"
+            props['ADED'] = aded
+            # Parse AD from ADED (e.g., "30-055" -> 30)
+            if aded:
+                try:
+                    props['ad'] = int(aded.split('-')[0])
+                except:
+                    pass
+            props['total'] = 0
+            props['single_prime'] = 0
+            props['double_prime'] = 0
+            props['triple_prime'] = 0
+            props['has_active_voters'] = False
+            props['data_quality'] = 'no_voters'
             no_data += 1
-            # Skip - do not add to filtered_features
+            filtered_features.append(feature)  # INCLUDE in output
 
     # Replace features with filtered list (dissolved EDs removed)
     geojson['features'] = filtered_features
