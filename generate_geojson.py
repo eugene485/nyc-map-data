@@ -262,22 +262,11 @@ def main():
             updated_active += 1
             filtered_features.append(feature)
         else:
-            # No voter data - keep as uninhabited ED
-            keep_props = {'OBJECTID', 'ElectDist', 'Shape__Area', 'Shape__Length',
-                         'ed', 'ad', 'ADED', 'sd', 'cd', 'council', 'countycode'}
-            keys_to_remove = [k for k in props.keys() if k not in keep_props]
-            for k in keys_to_remove:
-                del props[k]
-
-            props['ADED'] = aded if aded else None
-            props['name'] = f"ED {aded}" if aded else "Unknown"
-            props['total'] = 0
-            props['single_prime'] = 0
-            props['double_prime'] = 0
-            props['has_active_voters'] = False
-            props['data_quality'] = 'no_voters'
+            # No voter data = STALE ED from pre-redistricting shapefile
+            # These EDs no longer exist - voters were reassigned to new EDs
+            # REMOVE them from output (don't append to filtered_features)
             no_data += 1
-            filtered_features.append(feature)
+            # Skip - do not add to filtered_features
 
     # Replace features with filtered list (dissolved EDs removed)
     geojson['features'] = filtered_features
