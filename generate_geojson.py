@@ -250,11 +250,11 @@ def main():
                 dissolved_removed += 1
                 continue  # Skip this feature entirely
 
-            # Update voter count properties from voter data
-            # IMPORTANT: Do NOT overwrite geographic district fields from shapefile
-            geographic_fields = {'ad', 'sd', 'cd', 'council', 'countycode', 'county', 'aded'}
+            # Update properties from voter data
+            # Write ALL fields from MotherDuck including districts (ad, sd, cd, council)
+            # The shapefile doesn't have these district fields - they come from voter data
             for key, value in data.items():
-                if key not in geographic_fields:
+                if key != 'aded':  # Keep ADED from shapefile (already computed)
                     props[key] = value
             props['name'] = f"ED {aded}"
             props['has_active_voters'] = True
