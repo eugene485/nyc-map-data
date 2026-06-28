@@ -28,7 +28,9 @@ TOKEN = os.environ.get('MOTHERDUCK_TOKEN') or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV
 # Base GeoJSON with ED boundaries (geometry only)
 # Source: ArcGIS NYC DCP - has 100% coverage of voter file ADEDs
 # The NYT 2024 shapefile is missing 69 EDs (36,890 voters)
-BASE_GEOJSON = os.path.expanduser("~/Downloads/ed_shapefile/arcgis_dcp_nyc_eds_complete.geojson")
+_BASE_PRIMARY = os.path.expanduser("~/Downloads/ed_shapefile/arcgis_dcp_nyc_eds_complete.geojson")
+_BASE_FALLBACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nyc-eds.geojson")
+BASE_GEOJSON = _BASE_PRIMARY if os.path.exists(_BASE_PRIMARY) else _BASE_FALLBACK
 
 def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Connecting to MotherDuck...")
@@ -164,7 +166,43 @@ def main():
         SUM(CASE WHEN Likely_Ethnicity = 'Tibetan' AND primary_votes >= 2 THEN 1 ELSE 0 END) as tibetan_dp,
         SUM(CASE WHEN Likely_Ethnicity = 'Sikh' THEN 1 ELSE 0 END) as sikh,
         SUM(CASE WHEN Likely_Ethnicity = 'Sikh' AND primary_votes >= 1 THEN 1 ELSE 0 END) as sikh_sp,
-        SUM(CASE WHEN Likely_Ethnicity = 'Sikh' AND primary_votes >= 2 THEN 1 ELSE 0 END) as sikh_dp
+        SUM(CASE WHEN Likely_Ethnicity = 'Sikh' AND primary_votes >= 2 THEN 1 ELSE 0 END) as sikh_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ethiopian' THEN 1 ELSE 0 END) as ethiopian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ethiopian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as ethiopian_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ethiopian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as ethiopian_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ghanaian' THEN 1 ELSE 0 END) as ghanaian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ghanaian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as ghanaian_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ghanaian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as ghanaian_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Japanese' THEN 1 ELSE 0 END) as japanese,
+        SUM(CASE WHEN Likely_Ethnicity = 'Japanese' AND primary_votes >= 1 THEN 1 ELSE 0 END) as japanese_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Japanese' AND primary_votes >= 2 THEN 1 ELSE 0 END) as japanese_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Nigerian' THEN 1 ELSE 0 END) as nigerian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Nigerian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as nigerian_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Nigerian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as nigerian_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Persian' THEN 1 ELSE 0 END) as persian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Persian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as persian_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Persian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as persian_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Russian' THEN 1 ELSE 0 END) as russian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Russian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as russian_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Russian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as russian_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Turkish' THEN 1 ELSE 0 END) as turkish,
+        SUM(CASE WHEN Likely_Ethnicity = 'Turkish' AND primary_votes >= 1 THEN 1 ELSE 0 END) as turkish_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Turkish' AND primary_votes >= 2 THEN 1 ELSE 0 END) as turkish_dp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ukrainian' THEN 1 ELSE 0 END) as ukrainian,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ukrainian' AND primary_votes >= 1 THEN 1 ELSE 0 END) as ukrainian_sp,
+        SUM(CASE WHEN Likely_Ethnicity = 'Ukrainian' AND primary_votes >= 2 THEN 1 ELSE 0 END) as ukrainian_dp,
+
+        -- ED number (handy)
+        MODE(ed) as ed,
+
+        -- Primary turnout by year (any-format match: catches "20YYMMDD PR(", "Primary Election YYYY", "20YY Primary Election")
+        SUM(CASE WHEN voterhistory ILIKE '%20200623 PR%' OR voterhistory ILIKE '%PR 20200623%' OR voterhistory ILIKE '%2020 Primary Election%' OR voterhistory ILIKE '%Primary Election 2020%' THEN 1 ELSE 0 END) as turnout_2020,
+        SUM(CASE WHEN voterhistory ILIKE '%20210622 PR%' OR voterhistory ILIKE '%PR 20210622%' OR voterhistory ILIKE '%2021 Primary Election%' OR voterhistory ILIKE '%Primary Election 2021%' THEN 1 ELSE 0 END) as turnout_2021,
+        SUM(CASE WHEN voterhistory ILIKE '%20220628 PR%' OR voterhistory ILIKE '%PR 20220628%' OR voterhistory ILIKE '%20220823 PR%' OR voterhistory ILIKE '%PR 20220823%' OR voterhistory ILIKE '%2022 Primary Election%' OR voterhistory ILIKE '%Primary Election 2022%' THEN 1 ELSE 0 END) as turnout_2022,
+        SUM(CASE WHEN voterhistory ILIKE '%20230627 PR%' OR voterhistory ILIKE '%PR 20230627%' OR voterhistory ILIKE '%2023 Primary Election%' OR voterhistory ILIKE '%Primary Election 2023%' THEN 1 ELSE 0 END) as turnout_2023,
+        SUM(CASE WHEN voterhistory ILIKE '%20240625 PR%' OR voterhistory ILIKE '%PR 20240625%' OR voterhistory ILIKE '%20240402 PP%' OR voterhistory ILIKE '%PP 20240402%' OR voterhistory ILIKE '%2024 Primary Election%' OR voterhistory ILIKE '%Primary Election 2024%' THEN 1 ELSE 0 END) as turnout_2024,
+        SUM(CASE WHEN voterhistory ILIKE '%20250624 PR%' OR voterhistory ILIKE '%PR 20250624%' OR voterhistory ILIKE '%2025 Primary Election%' OR voterhistory ILIKE '%Primary Election 2025%' THEN 1 ELSE 0 END) as turnout_2025,
+        SUM(CASE WHEN voterhistory ILIKE '%20260624 PR%' OR voterhistory ILIKE '%PR 20260624%' OR voterhistory ILIKE '%2026 Primary Election%' OR voterhistory ILIKE '%Primary Election 2026%' THEN 1 ELSE 0 END) as turnout_2026
 
     FROM NYS_Voters_2026
     WHERE countycode IN (3, 24, 31, 41, 43)  -- NYC counties only
@@ -193,6 +231,21 @@ def main():
         return result
 
     voter_data = {row['aded']: convert_row(row) for _, row in df.iterrows()}
+
+    # Pull census data per ED and merge into voter_data
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Loading census per ED...")
+    census_df = conn.execute("""
+        SELECT aded, median_income, pct_poverty, pct_bachelors, pct_rent_burdened
+        FROM nyc_ed_census
+    """).fetchdf()
+    for _, row in census_df.iterrows():
+        aded = row['aded']
+        if aded in voter_data:
+            voter_data[aded]['median_income'] = None if row['median_income'] is None else float(row['median_income'])
+            voter_data[aded]['pct_poverty'] = None if row['pct_poverty'] is None else float(row['pct_poverty'])
+            voter_data[aded]['pct_bachelors'] = None if row['pct_bachelors'] is None else float(row['pct_bachelors'])
+            voter_data[aded]['pct_rent_burdened'] = None if row['pct_rent_burdened'] is None else float(row['pct_rent_burdened'])
+    print(f"[{datetime.now().strftime('%H:%M:%S')}]   Joined census for {len(census_df)} EDs")
 
     # Load base GeoJSON (has geometries)
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Loading base GeoJSON from {BASE_GEOJSON}...")
